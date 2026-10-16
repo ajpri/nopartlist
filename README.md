@@ -2,6 +2,12 @@
 
 A list and notes app served by Python, with data saved in SQLite.
 
+## Printable version
+
+Prefer paper? The original [printable No Part List PDF](NPL%201-3.pdf) is
+included in this repository. Download it and print a copy to use offline.
+The web app also has a **Print** button for printing your current list.
+
 ## Run
 
 Requires Python 3.10 or newer. No packages to install.
@@ -140,9 +146,11 @@ node tests/test_dates.js
 
 ## GitHub
 
-The repository uses `main`. After creating an empty GitHub repository:
+Source code and the printable PDF are available at
+[ajpri/nopartlist](https://github.com/ajpri/nopartlist). The default branch is `main`.
 
 ```sh
-git remote add origin <your-repository-url>
-git push -u origin main
+git clone https://github.com/ajpri/nopartlist.git
+cd nopartlist
+./startLinux.sh
 ```
