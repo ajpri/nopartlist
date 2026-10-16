@@ -68,6 +68,9 @@ the server prints account-management instructions. Existing users suppress the
 prompt, including when all accounts are disabled; use user management to enable
 an account. `--yes` accepts dependency installation only, not account creation.
 The browser never offers signup.
+The login page has a Light/Dark theme selector and remembers its choice in this
+browser. It also follows the last theme used in the app on this browser. After
+sign-in, the account's saved theme applies; list data stays in SQLite.
 
 You can also create the first account later from an interactive terminal:
 

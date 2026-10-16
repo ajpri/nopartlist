@@ -573,9 +573,8 @@
   // Dark mode functions
   function toggleDarkMode(){
     const isDark = document.documentElement.getAttribute("data-theme") === "dark";
-    document.documentElement.setAttribute("data-theme", isDark ? "light" : "dark");
-    darkModeToggle.textContent = isDark ? "🌙" : "☀️";
     state.theme = isDark ? "light" : "dark";
+    initDarkMode();
     saveState();
   }
 
@@ -583,6 +582,7 @@
     const savedTheme = state.theme || "dark";
     document.documentElement.setAttribute("data-theme", savedTheme);
     darkModeToggle.textContent = savedTheme === "dark" ? "☀️" : "🌙";
+    try { localStorage.setItem("paper_todo_theme", savedTheme); } catch {}
   }
 
   // Render everything

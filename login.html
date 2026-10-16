@@ -5,16 +5,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow, noarchive">
 <title>No Part List — Sign In</title>
+<script>
+try {
+  const theme = localStorage.getItem("paper_todo_theme");
+  if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+} catch {}
+</script>
 <style>
+  :root{color-scheme:light;--bg:#e9eef3;--paper:#fff;--ink:#222;--line:#cfd8dc;--accent:#1b73e8;--muted:#777;--error:#b00020}
+  :root[data-theme="dark"]{color-scheme:dark;--bg:#121212;--paper:#1e1e1e;--ink:#e0e0e0;--line:#404040;--accent:#4a9eff;--muted:#a0a0a0;--error:#ffb4ab}
   *{box-sizing:border-box}
-  body{margin:0;background:#e9eef3;color:#222;font:1rem system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-  main{max-width:400px;margin:12vh auto;padding:28px;background:#fff;border:1px solid #cfd8dc;border-radius:10px}
+  body{margin:0;background:var(--bg);color:var(--ink);font:1rem system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  main{max-width:400px;margin:12vh auto;padding:28px;background:var(--paper);border:1px solid var(--line);border-radius:10px}
   h1{margin:0 0 8px;font-size:1.5rem} h2{font-size:1.1rem;margin:0 0 24px;font-weight:500}
-  label{display:block;margin:16px 0} input,button{font:inherit;border-radius:6px;padding:10px 12px}
-  input{display:block;margin-top:6px;width:100%;border:1px solid #cfd8dc;background:#fff;color:inherit}
-  button{border:1px solid #1b73e8;background:#1b73e8;color:#fff;cursor:pointer;width:100%}
-  button:disabled{opacity:.5;cursor:wait} :focus-visible{outline:2px solid #1b73e8;outline-offset:3px}
-  #message{line-height:1.5;min-height:1.5em;color:#b00020} .hint{color:#777;font-size:.9rem;line-height:1.5}
+  label{display:block;margin:16px 0} input,button,select{font:inherit;border-radius:6px;padding:10px 12px}
+  input,select{display:block;margin-top:6px;width:100%;border:1px solid var(--line);background:var(--paper);color:inherit}
+  button{border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer;width:100%}
+  button:disabled{opacity:.5;cursor:wait} :focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+  #message{line-height:1.5;min-height:1.5em;color:var(--error)} .hint{color:var(--muted);font-size:.9rem;line-height:1.5}
   @media(max-width:440px){main{margin:24px 16px}}
 </style>
 </head>
@@ -29,12 +37,26 @@
     <button id="signIn" type="submit" disabled>Sign In</button>
   </form>
   <p class="hint">Your lists are private to your account.</p>
+  <label for="loginTheme">Theme</label>
+  <select id="loginTheme"><option value="light">Light</option><option value="dark">Dark</option></select>
 </main>
 <script>
 "use strict";
 let csrfToken = "";
 const message = document.querySelector("#message");
 const button = document.querySelector("#signIn");
+const themeSelector = document.querySelector("#loginTheme");
+themeSelector.value = document.documentElement.dataset.theme;
+themeSelector.addEventListener("change", () => {
+  document.documentElement.dataset.theme = themeSelector.value;
+  try { localStorage.setItem("paper_todo_theme", themeSelector.value); } catch {}
+});
+window.addEventListener("storage", event => {
+  if (event.key === "paper_todo_theme" && (event.newValue === "light" || event.newValue === "dark")){
+    document.documentElement.dataset.theme = event.newValue;
+    themeSelector.value = event.newValue;
+  }
+});
 async function loadSession(){
   try {
     const response = await fetch("/api/session");
