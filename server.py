@@ -99,7 +99,7 @@ def make_handler(database):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=1998)
     parser.add_argument("--database", type=Path, default=ROOT / "no_part_list.sqlite3")
     args = parser.parse_args()

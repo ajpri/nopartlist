@@ -6,6 +6,27 @@ A list and notes app served by Python, with data saved in SQLite.
 
 Requires Python 3.10 or newer. No packages to install.
 
+On Linux, the launcher checks Python and SQLite, offers to install missing
+system dependencies, and starts the server:
+
+```sh
+./startLinux.sh
+```
+
+It works from any current directory. `--check` performs checks without installing
+anything or creating a database; `--yes` accepts dependency installation;
+`--port 2000` changes the port; `--open` opens your default browser after startup.
+Set `PYTHON=/path/to/python3` to use a specific Python executable.
+Automatic installation supports apt, dnf, yum, pacman, zypper, and apk and uses
+sudo for system packages when needed. Pacman updates the system to avoid partial
+upgrades. Older distributions may require installing Python 3.10+ manually.
+No Python packages, virtual environment, or Node.js are needed to run the app.
+
+The launcher is inspired by the
+[wellbeing-agent Linux bootstrap](https://github.com/ajpri/wellbeing-agent/tree/feature/linux-bootstrap).
+
+Or start Python directly:
+
 ```sh
 python3 server.py
 ```
@@ -16,9 +37,13 @@ Stop it with Ctrl+C. Lists, tasks, selected list, and theme are stored in
 The database is excluded from Git. Back it up while the server is stopped,
 or use **Export all** to download JSON.
 
-Optional flags: `--port 1998`, `--host 127.0.0.1`, and `--database /path/to/data.sqlite3`.
-The default binds to this computer only. There is no authentication; only expose
-it to a network you trust.
+The server and Linux launcher listen on all interfaces (`0.0.0.0`) by default.
+Open `http://<this-computer-ip>:1998` from another device on your network.
+There is no authentication; anyone who can reach the server can read and change
+the lists, so use a trusted network.
+
+Optional server flags: `--port 1998`, `--host 127.0.0.1` (local access only),
+and `--database /path/to/data.sqlite3`.
 
 ## Existing browser data
 
