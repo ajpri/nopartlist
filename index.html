@@ -131,6 +131,10 @@
 <div class="app">
 
   <aside class="sidebar">
+    <div class="side-controls">
+      <span id="signedInUser"></span>
+      <button id="logout" type="button">Sign out</button>
+    </div>
     <h2>Lists</h2>
     <div class="side-controls">
       <button id="addList">New list</button>
@@ -185,7 +189,8 @@
 
     <div class="status">
       <div id="count">0 of 0 complete</div>
-      <div id="autosave" role="status" aria-live="polite">All changes saved</div>
+      <div><span id="autosave" role="status" aria-live="polite">Loading…</span>
+        <a id="signInAgain" href="/" hidden>Sign in again</a></div>
     </div>
   </main>
 
@@ -223,8 +228,9 @@
   const daysCountInput = $("#daysCount");
   const fromDateBtn = $("#fromDate");
 
-  const STORAGE_KEY = "paper_todo_multi_v1";
-  const DARK_MODE_KEY = "paper_todo_dark_mode";
+  let csrfToken = "";
+  let authExpired = false;
+  const logoutBtn = $("#logout");
 
   // App state: multiple lists
   let state = {
@@ -459,12 +465,13 @@
   function queueSave(snapshot){
     pendingSnapshot = snapshot;
     clearTimeout(statusTimer);
-    autosaveEl.textContent = saveConflict ? "Save conflict — export your changes, then reload" : "Saving…";
+    autosaveEl.textContent = authExpired ? "Session ended — export unsaved changes, then sign in again" :
+      saveConflict ? "Save conflict — export your changes, then reload" : "Saving…";
     persistPending();
   }
 
   async function persistPending(){
-    if (saving || saveConflict || pendingSnapshot === null) return;
+    if (saving || saveConflict || authExpired || pendingSnapshot === null) return;
     clearTimeout(retryTimer);
     saving = true;
     try {
@@ -472,11 +479,15 @@
         const snapshot = pendingSnapshot;
         const response = await fetch("/api/state", {
           method: "PUT",
-          headers: {"Content-Type": "application/json"},
+          headers: {"Content-Type": "application/json", "X-CSRF-Token": csrfToken},
           body: JSON.stringify({revision, state: JSON.parse(snapshot)})
         });
         if (!response.ok){
           saveConflict = response.status === 409;
+          if (response.status === 401 || response.status === 403){
+            authExpired = true;
+            $("#signInAgain").hidden = false;
+          }
           const error = await response.json();
           throw new Error(error.error || "Could not save");
         }
@@ -486,7 +497,7 @@
       if (saveTimer === null) showSaved();
     } catch (error){
       autosaveEl.textContent = `Not saved: ${error.message}`;
-      if (!saveConflict) retryTimer = setTimeout(persistPending, 3000);
+      if (!saveConflict && !authExpired) retryTimer = setTimeout(persistPending, 3000);
     } finally {
       saving = false;
     }
@@ -812,11 +823,18 @@
     createWeek(picked, days);
   });
 
-  // Load server state before enabling editing. Read localStorage only for migration.
+  // Load only the signed-in user's server data. Old browser exports can be imported explicitly.
   async function initialize(){
     autosaveEl.textContent = "Loading…";
     try {
-      const response = await fetch("/api/state");
+      const sessionResponse = await fetch("/api/session");
+      if (!sessionResponse.ok) throw new Error("Could not load session");
+      const session = await sessionResponse.json();
+      if (!session.user){ location.replace("/"); return; }
+      csrfToken = session.csrfToken;
+      $("#signedInUser").textContent = session.user.username;
+      const response = await fetch("/api/state", {headers:{"X-CSRF-Token":csrfToken}});
+      if (response.status === 401 || response.status === 403){ location.replace("/"); return; }
       if (!response.ok) throw new Error("Could not load saved lists");
       const stored = await response.json();
       revision = stored.revision;
@@ -824,15 +842,7 @@
         state = stored.state;
         lastSavedSnapshot = JSON.stringify(state);
       } else {
-        let legacy = null;
-        let theme = "dark";
-        try {
-          const saved = localStorage.getItem(STORAGE_KEY);
-          if (saved) legacy = JSON.parse(saved);
-          theme = localStorage.getItem(DARK_MODE_KEY) || "dark";
-        } catch {}
-        if (legacy && Array.isArray(legacy.lists)) state = legacy;
-        state.theme = theme === "light" ? "light" : "dark";
+        state = {currentId:null, lists:[], theme:"dark"};
       }
       initDarkMode();
       renderAll();
@@ -845,6 +855,32 @@
       autosaveEl.textContent = `Could not load: ${error.message}. Start the Python server and reload.`;
     }
   }
+
+  logoutBtn.addEventListener("click", async () => {
+    const app = document.querySelector(".app");
+    app.inert = true;
+    try {
+      saveCurrentFromInputs();
+      const deadline = Date.now() + 10000;
+      while (saving && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 50));
+      if (saving || pendingSnapshot !== null){
+        throw new Error("Changes are not saved. Export your edits or retry before signing out.");
+      }
+      const response = await fetch("/api/logout", {
+        method:"POST", headers:{"Content-Type":"application/json", "X-CSRF-Token":csrfToken}, body:"{}"
+      });
+      if (!response.ok) throw new Error("Could not sign out. Your session may have ended; reload after exporting unsaved edits.");
+      ready = false;
+      clearTimeout(saveTimer);
+      clearTimeout(retryTimer);
+      clearTimeout(statusTimer);
+      location.replace("/");
+    } catch (error){
+      clearTimeout(statusTimer);
+      autosaveEl.textContent = error.message;
+      app.inert = false;
+    }
+  });
 
   window.addEventListener("beforeunload", event => {
     if (ready && (saveTimer !== null || pendingSnapshot !== null || saving)){

@@ -5,11 +5,14 @@ set -Eeuo pipefail
 die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
 usage() {
     cat <<'HELP'
-Usage: ./startLinux.sh [--yes] [--check] [--port PORT] [--open]
+Usage: ./startLinux.sh [--yes] [--check] [--port PORT] [--open] [--secure-cookie]
+       ./startLinux.sh manage-users
   --yes       Accept dependency installation without prompting.
   --check     Check dependencies, project files and port; make no changes.
   --port PORT Use a different port (default: 1998; listens on all interfaces).
   --open      Open the app in your default browser when starting.
+  --secure-cookie  Use Secure cookies when serving behind HTTPS.
+  manage-users     Manage accounts in the terminal without starting a server.
   --help      Show this help.
 
 Requires Python 3.10+ with SQLite support. No pip packages are needed.
@@ -20,12 +23,16 @@ HELP
 YES=false
 CHECK=false
 OPEN=false
+MANAGE=false
+SECURE_COOKIE=()
 PORT=1998
 while (($#)); do
     case "$1" in
         --yes) YES=true ;;
         --check) CHECK=true ;;
         --open) OPEN=true ;;
+        manage-users) MANAGE=true ;;
+        --secure-cookie) SECURE_COOKIE=(--secure-cookie) ;;
         --port)
             (($# >= 2)) || die '--port requires a number.'
             PORT=$2
@@ -44,7 +51,7 @@ cd -- "$PROJECT_DIR"
 
 python_ready() {
     command -v "$PYTHON_BIN" >/dev/null 2>&1 &&
-        "$PYTHON_BIN" -c 'import sys, sqlite3, http.server; assert sys.version_info >= (3, 10); sqlite3.connect(":memory:").close()' >/dev/null 2>&1
+        "$PYTHON_BIN" -c 'import sys, sqlite3, http.server, hashlib; assert sys.version_info >= (3, 10); assert callable(hashlib.pbkdf2_hmac); sqlite3.connect(":memory:").close()' >/dev/null 2>&1
 }
 PYTHON_BIN=${PYTHON:-python3}
 if ! python_ready; then
@@ -95,13 +102,17 @@ if ! python_ready; then
     python_ready || die 'Python is still missing, too old, or lacks SQLite. Install Python 3.10+ manually or set PYTHON to a compatible executable.'
 fi
 
+if $MANAGE && ! $CHECK; then
+    exec "$PYTHON_BIN" "$PROJECT_DIR/users.py"
+fi
+
 "$PYTHON_BIN" - "$PORT" <<'PY'
 import os
 from pathlib import Path
 import socket
 import sys
 
-for name in ("server.py", "index.html"):
+for name in ("server.py", "index.html", "login.html", "database.py", "auth.py", "users.py"):
     if not Path(name).is_file():
         sys.exit(f"Error: Missing {name}; run from a complete project checkout.")
 database = Path("no_part_list.sqlite3")
@@ -131,7 +142,7 @@ url = f"http://127.0.0.1:{sys.argv[1]}"
 opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 for _ in range(40):
     try:
-        with opener.open(url + "/api/state", timeout=0.5) as response:
+        with opener.open(url, timeout=0.5) as response:
             if response.status == 200:
                 if not webbrowser.open(url):
                     print(f"Could not open a browser. Open {url} manually.", file=sys.stderr)
@@ -144,4 +155,4 @@ PY
 fi
 printf 'Starting No Part List on 0.0.0.0:%s\nOpen http://127.0.0.1:%s locally, or use this computer\x27s network address.\nPress Ctrl+C to stop.\n' "$PORT" "$PORT"
 # One server: exec forwards signals directly and preserves its exit status.
-exec "$PYTHON_BIN" "$PROJECT_DIR/server.py" --host 0.0.0.0 --port "$PORT"
+exec "$PYTHON_BIN" "$PROJECT_DIR/server.py" --host 0.0.0.0 --port "$PORT" "${SECURE_COOKIE[@]}"

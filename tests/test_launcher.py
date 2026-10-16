@@ -20,7 +20,7 @@ class LauncherTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="list launcher ")
         self.project = Path(self.temp.name)
-        for name in ("startLinux.sh", "server.py", "index.html"):
+        for name in ("startLinux.sh", "server.py", "index.html", "login.html", "auth.py", "database.py", "users.py"):
             shutil.copy2(ROOT / name, self.project / name)
         self.env = {**os.environ, "PYTHON": sys.executable}
 
@@ -101,8 +101,10 @@ fi
                 if process.poll() is not None:
                     self.fail(f"Launcher exited: {process.communicate()}")
                 try:
-                    with urlopen(f"http://127.0.0.1:{port}/api/state", timeout=0.3) as response:
-                        self.assertEqual(json.load(response), {"revision": 0, "state": None})
+                    with urlopen(f"http://127.0.0.1:{port}/api/session", timeout=0.3) as response:
+                        session = json.load(response)
+                        self.assertIsNone(session["user"])
+                        self.assertTrue(session["setupRequired"])
                     break
                 except (OSError, URLError):
                     time.sleep(0.05)

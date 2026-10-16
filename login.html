@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<title>No Part List — Sign In</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:#121212;color:#e0e0e0;font:1rem system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  main{max-width:400px;margin:12vh auto;padding:28px;background:#1e1e1e;border:1px solid #404040;border-radius:10px}
+  h1{margin:0 0 8px;font-size:1.5rem} h2{font-size:1.1rem;margin:0 0 24px;font-weight:500}
+  label{display:block;margin:16px 0} input,button{font:inherit;border-radius:6px;padding:10px 12px}
+  input{display:block;margin-top:6px;width:100%;border:1px solid #666;background:#121212;color:inherit}
+  button{border:1px solid #4a9eff;background:#4a9eff;color:#121212;cursor:pointer;width:100%}
+  button:disabled{opacity:.5;cursor:wait} :focus-visible{outline:2px solid #4a9eff;outline-offset:3px}
+  #message{line-height:1.5;min-height:1.5em;color:#ffb4ab} .hint{color:#a0a0a0;font-size:.9rem;line-height:1.5}
+  @media(max-width:440px){main{margin:24px 16px}}
+</style>
+</head>
+<body>
+<main>
+  <h1>No Part List</h1>
+  <h2>Sign In</h2>
+  <form id="loginForm">
+    <label>Username<input id="username" name="username" autocomplete="username" maxlength="64" required autofocus></label>
+    <label>Password<input id="password" name="password" type="password" autocomplete="current-password" maxlength="128" required></label>
+    <p id="message" role="alert" aria-live="polite"></p>
+    <button id="signIn" type="submit" disabled>Sign In</button>
+  </form>
+  <p class="hint">Your lists are private to your account.</p>
+</main>
+<script>
+"use strict";
+let csrfToken = "";
+const message = document.querySelector("#message");
+const button = document.querySelector("#signIn");
+async function loadSession(){
+  try {
+    const response = await fetch("/api/session");
+    const session = await response.json();
+    if (!response.ok) throw new Error(session.error || "Could not load sign-in form.");
+    if (session.user){ location.replace("/"); return; }
+    csrfToken = session.csrfToken;
+    if (session.setupRequired){
+      message.textContent = "No users configured. In a terminal, run ./startLinux.sh manage-users to create the first account, then reload this page.";
+      return;
+    }
+    button.disabled = false;
+  } catch (error){ message.textContent = `${error.message} Reload to try again.`; }
+}
+document.querySelector("#loginForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  button.disabled = true;
+  message.textContent = "Signing in…";
+  try {
+    const response = await fetch("/api/login", {
+      method: "POST",
+      headers: {"Content-Type":"application/json", "X-CSRF-Token":csrfToken},
+      body: JSON.stringify({username:document.querySelector("#username").value, password:document.querySelector("#password").value})
+    });
+    const result = await response.json();
+    document.querySelector("#password").value = "";
+    if (!response.ok) throw new Error(result.error || "Could not sign in.");
+    location.replace("/");
+  } catch (error){
+    message.textContent = error.message;
+    button.disabled = false;
+  }
+});
+loadSession();
+</script>
+</body>
+</html>

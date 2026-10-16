@@ -16,6 +16,7 @@ system dependencies, and starts the server:
 It works from any current directory. `--check` performs checks without installing
 anything or creating a database; `--yes` accepts dependency installation;
 `--port 2000` changes the port; `--open` opens your default browser after startup.
+Use `--secure-cookie` when serving the app behind HTTPS.
 Set `PYTHON=/path/to/python3` to use a specific Python executable.
 Automatic installation supports apt, dnf, yum, pacman, zypper, and apk and uses
 sudo for system packages when needed. Pacman updates the system to avoid partial
@@ -39,24 +40,67 @@ or use **Export all** to download JSON.
 
 The server and Linux launcher listen on all interfaces (`0.0.0.0`) by default.
 Open `http://<this-computer-ip>:1998` from another device on your network.
-There is no authentication; anyone who can reach the server can read and change
-the lists, so use a trusted network.
+Sign-in is required. Each account has its own lists, tasks, notes, selected list,
+and theme. Accounts are independent of No Part Finance. Sharing and collaboration
+are not enabled. Lists have explicit owners and stable internal identities to
+allow future sharing without mixing accounts' data.
+
+For internet access, put the app behind a properly configured HTTPS reverse
+proxy and use `--secure-cookie`. Keep the Python port private to the proxy.
+The built-in server is intended for trusted self-hosted use. On plain HTTP,
+passwords and session cookies are not encrypted in transit.
 
 Optional server flags: `--port 1998`, `--host 127.0.0.1` (local access only),
-and `--database /path/to/data.sqlite3`.
+`--secure-cookie`, and `--database /path/to/data.sqlite3`.
+
+## Accounts and sessions
+
+There are no default credentials and no public signup. Create the first account
+in an interactive terminal:
+
+```sh
+./startLinux.sh manage-users
+```
+
+This menu can create or list users, reset passwords, and disable or enable
+accounts without starting or stopping the server. Password entry is hidden.
+Passwords must be 8–128 characters and are stored as salted PBKDF2-SHA256 hashes.
+Direct commands are also available:
+
+```sh
+python3 users.py create austin
+python3 users.py list
+python3 users.py reset-password austin
+python3 users.py disable austin
+python3 users.py enable austin
+```
+
+For a custom database, put `--database /path/to/data.sqlite3` before the command.
+The first user created receives all lists already in the original single-user
+database, atomically. Later users start with empty lists. Disabling an account
+retains its lists. Password resets, disabling, and enabling revoke that account's
+existing sessions.
+
+Sessions last **168 hours (7 days) from sign-in**. They use HttpOnly, SameSite
+cookies and server-side CSRF tokens. Sessions live only in the server process:
+stopping or restarting it logs everyone out, including after a crash.
+Signing out revokes the current session. Failed sign-ins are limited to five
+attempts per minute per connecting IP address; behind a reverse proxy that IP
+may be shared by all users.
 
 ## Existing browser data
 
-On the first run with an empty database, the app migrates old localStorage data
-if it is available at the current origin. Browser storage belongs to a specific
-address and port: if the old app ran elsewhere, export its lists there and use
-**Import** in the new app. The old browser copy is retained as a backup, but
-future changes save to SQLite. Import replaces the current lists; Undo can
-restore them during the session.
+Export lists from the old browser app and use **Import** after signing into the
+account that should own them. Browser storage is no longer imported automatically,
+so another account using the same browser cannot inherit old private lists.
+Import replaces only the signed-in user's lists; Undo can restore them during
+the session. Existing data already in SQLite is assigned to the first account.
 
 Save failures appear beside the task count and retry after connection failures.
 If another tab changes the database, export any unsaved edits before reloading.
 An unsaved-changes prompt helps prevent closing a tab before saving finishes.
+If a session expires, export unsaved edits before following **Sign in again**.
+An old tab cannot save to a different user's account after an account switch.
 
 ## Check
 
