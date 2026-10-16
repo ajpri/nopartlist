@@ -63,7 +63,15 @@ in an interactive terminal:
 ```
 
 This menu can create or list users, reset passwords, and disable or enable
-accounts without starting or stopping the server. Password entry is hidden.
+accounts. **The server can stay running:** open a second terminal, change to the
+project directory, and run `./startLinux.sh manage-users`. This starts only user
+management; it does not stop, restart, or launch another server. No separate
+launcher is needed.
+
+Changes take effect immediately, without downtime: new users can sign in as
+soon as they are created; password resets and disabling or enabling accounts
+revoke their existing sessions. Other users remain signed in and can keep
+working. Password entry is hidden.
 Passwords must be 8–128 characters and are stored as salted PBKDF2-SHA256 hashes.
 Direct commands are also available:
 
