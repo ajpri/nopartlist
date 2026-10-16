@@ -39,6 +39,12 @@ An unsaved-changes prompt helps prevent closing a tab before saving finishes.
 python3 -m unittest discover -s tests -v
 ```
 
+Calendar-date regression checks require Node.js and cover six time zones:
+
+```sh
+node tests/test_dates.js
+```
+
 ## GitHub
 
 The repository uses `main`. After creating an empty GitHub repository:

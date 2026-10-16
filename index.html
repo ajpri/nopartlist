@@ -247,9 +247,17 @@
   // Utils
   const uid = () => Math.random().toString(36).slice(2,10);
   const pad = n => String(n).padStart(2,"0");
-  function todayISO(){
-    const d = new Date();
+  function formatLocalDate(d){
     return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  }
+  function parseLocalDate(iso){
+    const [year, month, day] = iso.split("-").map(Number);
+    // Date-only strings parse as UTC. Use local noon for calendar arithmetic,
+    // away from daylight-saving transitions around midnight.
+    return new Date(year, month - 1, day, 12);
+  }
+  function todayISO(){
+    return formatLocalDate(new Date());
   }
   function toYYMMDD(iso){
     const [y,m,d] = (iso || todayISO()).split("-");
@@ -261,16 +269,16 @@
   }
   function safe(str){return (str || "list").replace(/[\\/:*?"<>|]/g,"_")}
   function addDaysISO(iso, days){
-    const d = new Date(iso);
+    const d = parseLocalDate(iso);
     d.setDate(d.getDate() + days);
-    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    return formatLocalDate(d);
   }
   function getMondayISO(iso){
-    const d = new Date(iso || todayISO());
+    const d = parseLocalDate(iso || todayISO());
     const day = d.getDay(); // 0 Sun..6 Sat
     const diff = (day === 0 ? -6 : 1 - day); // move to Monday
     d.setDate(d.getDate() + diff);
-    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    return formatLocalDate(d);
   }
   const DOW_TITLES = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 
@@ -710,10 +718,7 @@
     }
 
     // Find the next chronological day
-    const currentDate = new Date(currentList.date);
-    const nextDate = new Date(currentDate);
-    nextDate.setDate(currentDate.getDate() + 1);
-    const nextDateISO = nextDate.toISOString().split('T')[0];
+    const nextDateISO = addDaysISO(currentList.date, 1);
 
     const nextList = state.lists.find(l => l.date === nextDateISO);
     if (!nextList) {
