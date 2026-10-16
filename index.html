@@ -1,0 +1,858 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>No Part List</title>
+<style>
+  :root{
+    --paper:#fff;
+    --ink:#222;
+    --muted:#777;
+    --accent:#1b73e8;
+    --line:#cfd8dc;
+    --bg:#e9eef3;
+    --surface:#f7fafc;
+    --hover:#eaf3ff;
+  }
+
+  :root[data-theme="dark"]{
+    --paper:#1e1e1e;
+    --ink:#e0e0e0;
+    --muted:#a0a0a0;
+    --accent:#4a9eff;
+    --line:#404040;
+    --bg:#121212;
+    --surface:#1b1f24;
+    --hover:#0f2136;
+  }
+  html,body{height:100%;transition:background-color .2s ease,color .2s ease}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Arial,sans-serif;color:var(--ink);background:var(--bg)}
+  .app{max-width:1100px;margin:20px auto;padding:16px;display:grid;grid-template-columns:280px 1fr;gap:16px}
+
+  /* Sidebar */
+  .sidebar{background:var(--paper);border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.18);padding:14px;display:flex;flex-direction:column;gap:10px
+  }
+  .sidebar h2{margin:0 0 4px 0;font-size:1.05rem}
+  .lists{display:flex;flex-direction:column;gap:6px;max-height:70vh;overflow:auto;padding-right:4px}
+  .lists button{
+    display:flex;align-items:center;gap:8px;
+    width:100%;text-align:left;padding:8px 10px;border:1px solid var(--line);background:var(--surface);border-radius:8px;cursor:pointer
+  }
+  .lists button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .lists button:hover{background:var(--hover)}
+  .lists button.dragging{opacity:0.5;cursor:grabbing}
+  .lists button.dragover{border-color:var(--accent);background:var(--hover)}
+  .side-controls{display:flex;flex-wrap:wrap;gap:8px}
+  .side-controls button{padding:8px 10px;border:1px solid var(--line);background:var(--surface);border-radius:8px;cursor:pointer;color:var(--ink);transition:background-color .15s ease,border-color .15s ease}
+  .side-controls label{padding:8px 10px;border:1px solid var(--line);background:var(--surface);border-radius:8px;cursor:pointer;color:var(--ink);transition:background-color .15s ease,border-color .15s ease}
+  input[type="file"]{display:none}
+  .side-controls button:hover,.side-controls label:hover{background:var(--hover)}
+  .side-controls button:focus,.side-controls label:focus{outline:2px solid var(--accent);outline-offset:1px}
+
+  /* Week tools */
+  .sidebar input[type="number"]{padding:8px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;background:var(--paper);color:var(--ink);transition:background-color .2s ease,color .2s ease}
+  .week-tools{margin-top:6px}
+  .sidebar input[type="date"]{
+    padding:8px 10px;border:1px solid var(--line);border-radius:8px;font:inherit
+  ;background:var(--paper);color:var(--ink);transition:background-color .2s ease,color .2s ease}
+
+  /* Main card */
+  .paper{background:var(--paper);border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.18);padding:24px}
+  .top{display:grid;grid-template-columns:140px 1fr;gap:12px;align-items:center;margin-bottom:14px}
+  .date input{width:140px;padding:8px 10px;border:1px solid var(--line);border-radius:6px;font:inherit;background:var(--paper);color:var(--ink);transition:background-color .2s ease,color .2s ease}
+  .title{border:none;border-bottom:2px solid var(--line);padding:8px 2px;font-size:1.1rem;width:100%;outline:none;background:var(--paper);color:var(--ink);transition:background-color .2s ease,color .2s ease}
+  .title:focus{border-color:var(--accent)}
+
+  .controls{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0}
+  button.primary{background:var(--accent);color:#fff;border:1px solid var(--accent)}
+  button, label.buttonlike{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:10px 14px;font:inherit;cursor:pointer}
+  button:disabled{opacity:.45;cursor:not-allowed}
+
+  .sheet-lines{position:relative;padding:8px 0 2px}
+  .sheet-lines::before{
+    content:"";position:absolute;inset:0;background:
+      repeating-linear-gradient(to bottom,transparent 0,transparent 26px,var(--line) 26px,var(--line) 27px);
+    pointer-events:none;border-radius:6px
+  }
+  ul#tasks{list-style:none;margin:0;padding:0 4px;position:relative;z-index:1}
+  li.task{display:grid;grid-template-columns:auto 1fr auto auto;align-items:center;gap:10px;padding:6px 2px}
+  .cb{appearance:none;width:18px;height:18px;border:2px solid var(--ink);border-radius:50%;display:inline-grid;place-content:center;cursor:pointer;margin:0}
+  .cb:checked{background:radial-gradient(circle at 50% 50%, var(--ink) 0 50%, transparent 51%)}
+  .task input[type="text"]{width:100%;border:none;background:transparent;padding:6px 4px;outline:none;font:inherit;color: var(--ink);}
+  .task input[type="text"]::placeholder{color:var(--muted)}
+  .drag{cursor:grab;user-select:none;font-size:18px;padding:0 8px;color:var(--muted)}
+  .drag:active{cursor:grabbing}
+  .task.dragover{outline:2px dashed var(--accent);border-radius:6px}
+  .task.done input[type="text"]{text-decoration:line-through;color:var(--muted)}
+
+  .notes{margin-top:14px}
+  .notes h3{margin:6px 0 8px}
+  .notes textarea{width:100%;min-height:140px;border:1px solid var(--line);border-radius:8px;padding:10px 12px;resize:vertical;font:inherit;background:var(--paper);color:var(--ink)}
+
+  .status{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:10px;color:var(--muted);font-size:.95rem}
+
+  @media (max-width:950px){.app{grid-template-columns:1fr}}
+  @media print {
+  :root {
+    --paper: #fff !important;
+    --ink: #000 !important;
+    --muted: #555 !important;
+    --line: #ccc !important;
+    --bg: #fff !important;
+  }
+  body { background:#fff !important; color:#000 !important; }
+  .app { margin:0; padding:0; grid-template-columns:1fr }
+  .sidebar, .controls, .status { display:none }
+  .paper { box-shadow:none; border-radius:0 }
+  .title { border-color:#000 }
+  .notes textarea { border:1px solid #000 }
+}
+
+
+  .del{
+    border:1px solid var(--line);
+    background:#fee;
+    color:#b00020;
+    border-radius:8px;
+    padding:6px 10px;
+    cursor:pointer;
+    display:none;
+  }
+  li.task:hover .del{
+    display:inline-block;
+  }
+  .del:hover{ background:#ffdada }
+  .del:focus{ outline:2px solid var(--accent) }
+
+</style>
+</head>
+<body>
+<div class="app">
+
+  <aside class="sidebar">
+    <h2>Lists</h2>
+    <div class="side-controls">
+      <button id="addList">New list</button>
+      <button id="duplicateList">Duplicate</button>
+      <button id="deleteList">Delete</button>
+    </div>
+
+    <!-- Week creators -->
+    <div class="week-tools">
+      <h2>Create Lists</h2>
+      <div class="side-controls">
+        <button id="thisWeek">This week</button>
+      </div>
+      <div class="side-controls">
+        <input id="weekStart" type="date" aria-label="Week start (Monday)" />
+        <input id="daysCount" type="number" min="1" max="31" value="7" aria-label="Number of days" style="width: 60px;" />
+        <button id="fromDate">Create lists</button>
+      </div>
+    </div>
+
+    <div class="lists" id="listsNav" aria-label="Available lists"></div>
+    <div class="side-controls">
+      <button id="exportAll">Export all</button>
+      <label for="importAll">Import</label>
+      <input id="importAll" type="file" accept="application/json,.json" />
+      <button id="printBtn">Print</button>
+      <button id="darkModeToggle">🌙</button>
+    </div>
+  </aside>
+
+  <main class="paper" role="application" aria-label="Todo list">
+    <div class="top">
+      <div class="date"><input id="date" type="date" aria-label="Date" /></div>
+      <input id="title" class="title" type="text" placeholder="Title" />
+    </div>
+
+    <div class="controls">
+      <button id="add" class="primary">Add item</button>
+      <button id="clearDone">Clear completed</button>
+      <button id="copyIncomplete">Copy incomplete to next</button>
+      <button id="undo" disabled>Undo</button>
+      <button id="redo" disabled>Redo</button>
+    </div>
+
+    <div class="sheet-lines" aria-hidden="true"></div>
+    <ul id="tasks" aria-live="polite"></ul>
+
+    <div class="notes">
+      <h3>Notes</h3>
+      <textarea id="notes" placeholder="Type notes here"></textarea>
+    </div>
+
+    <div class="status">
+      <div id="count">0 of 0 complete</div>
+      <div id="autosave" role="status" aria-live="polite">All changes saved</div>
+    </div>
+  </main>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // Elements
+  const $ = s => document.querySelector(s);
+  const tasksEl = $("#tasks");
+  const titleEl = $("#title");
+  const dateEl = $("#date");
+  const notesEl = $("#notes");
+  const addBtn = $("#add");
+  const clearDoneBtn = $("#clearDone");
+  const copyIncompleteBtn = $("#copyIncomplete");
+  const undoBtn = $("#undo");
+  const redoBtn = $("#redo");
+  const exportBtn = $("#exportAll");
+  const importInput = $("#importAll");
+  const printBtn = $("#printBtn");
+  const darkModeToggle = $("#darkModeToggle");
+  const addListBtn = $("#addList");
+  const duplicateListBtn = $("#duplicateList");
+  const deleteListBtn = $("#deleteList");
+  const listsNav = $("#listsNav");
+  const countEl = $("#count");
+  const autosaveEl = $("#autosave");
+
+  // Week tools
+  const thisWeekBtn = $("#thisWeek");
+  const weekStartInput = $("#weekStart");
+  const daysCountInput = $("#daysCount");
+  const fromDateBtn = $("#fromDate");
+
+  const STORAGE_KEY = "paper_todo_multi_v1";
+  const DARK_MODE_KEY = "paper_todo_dark_mode";
+
+  // App state: multiple lists
+  let state = {
+    currentId: null,
+    lists: [] // each {id, title, date, notes, tasks:[{text,done}]}
+  };
+  const undoStack = [];
+  const redoStack = [];
+  let lastSavedSnapshot = null;
+  let revision = 0;
+  let pendingSnapshot = null;
+  let saving = false;
+  let retryTimer = null;
+  let statusTimer = null;
+  let saveConflict = false;
+  let ready = false;
+  document.querySelector(".app").inert = true;
+  let isRestoringHistory = false;
+
+  // Utils
+  const uid = () => Math.random().toString(36).slice(2,10);
+  const pad = n => String(n).padStart(2,"0");
+  function todayISO(){
+    const d = new Date();
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  }
+  function toYYMMDD(iso){
+    const [y,m,d] = (iso || todayISO()).split("-");
+    return `${y.slice(-2)}${m}${d}`;
+  }
+  function toMMDDYYYY(iso){
+    const [y,m,d] = (iso || todayISO()).split("-");
+    return `${m}/${d}/${y}`;
+  }
+  function safe(str){return (str || "list").replace(/[\\/:*?"<>|]/g,"_")}
+  function addDaysISO(iso, days){
+    const d = new Date(iso);
+    d.setDate(d.getDate() + days);
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  }
+  function getMondayISO(iso){
+    const d = new Date(iso || todayISO());
+    const day = d.getDay(); // 0 Sun..6 Sat
+    const diff = (day === 0 ? -6 : 1 - day); // move to Monday
+    d.setDate(d.getDate() + diff);
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  }
+  const DOW_TITLES = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+
+  // Rendering lists nav
+  function renderNav(){
+    listsNav.innerHTML = "";
+    state.lists
+      .slice()
+      .sort((a,b) => (a.date||"") < (b.date||"") ? -1 : 1)
+      .forEach(list => {
+        const btn = document.createElement("button");
+        btn.className = list.id === state.currentId ? "active" : "";
+        btn.draggable = true;
+        btn.dataset.listId = list.id;
+        const when = list.date ? toMMDDYYYY(list.date) : "--/--/----";
+        const whenEl = document.createElement("strong");
+        whenEl.textContent = when;
+        const nameEl = document.createElement("span");
+        nameEl.textContent = list.title || "Untitled";
+        btn.append(whenEl, nameEl);
+        btn.addEventListener("click", ()=>{saveCurrentFromInputs(); state.currentId = list.id; saveState(); renderAll();});
+
+        // Drag and drop for reordering
+        btn.addEventListener("dragstart", e => {
+          btn.classList.add("dragging");
+          e.dataTransfer.setData("text/plain", list.id);
+        });
+        btn.addEventListener("dragend", () => btn.classList.remove("dragging"));
+        btn.addEventListener("dragover", e => {
+          e.preventDefault();
+          const dragging = listsNav.querySelector(".dragging");
+          if (!dragging || dragging === btn) return;
+          const rect = btn.getBoundingClientRect();
+          const before = e.clientY < rect.top + rect.height / 2;
+          btn.classList.add("dragover");
+          listsNav.insertBefore(dragging, before ? btn : btn.nextSibling);
+        });
+        btn.addEventListener("dragleave", () => btn.classList.remove("dragover"));
+        btn.addEventListener("drop", e => {
+          e.preventDefault();
+          btn.classList.remove("dragover");
+          reorderLists();
+        });
+
+        listsNav.appendChild(btn);
+      });
+  }
+
+
+  // Keep exactly one empty placeholder, always at the end.
+  function ensureTrailingBlank(){
+    const rows = [...tasksEl.querySelectorAll("li.task")];
+    const emptyRows = rows.filter(row =>
+      row.querySelector('input[type="text"]').value.trim() === ""
+    );
+    const placeholder = emptyRows.pop() || buildTask({text:"",done:false});
+    emptyRows.forEach(row => row.remove());
+    if (placeholder !== tasksEl.lastElementChild) tasksEl.appendChild(placeholder);
+  }
+// Build a task row
+  function buildTask(t){
+    const li = document.createElement("li");
+    li.className = "task";
+    li.draggable = true;
+
+    const cb = document.createElement("input");
+    cb.type = "checkbox"; cb.className = "cb"; cb.checked = !!t.done;
+
+    const text = document.createElement("input");
+    text.type = "text"; text.placeholder = "Write a task"; text.value = t.text || "";
+
+    const drag = document.createElement("span");
+    drag.className = "drag"; drag.title = "Drag to reorder"; drag.textContent = "⋮⋮";
+
+    if (t.done) li.classList.add("done");
+
+    // events
+    cb.addEventListener("change", () => {
+      li.classList.toggle("done", cb.checked);
+      saveInputsToStateDebounced();
+      updateCount();
+    });
+
+    text.addEventListener("input", () => { saveInputsToStateDebounced(); ensureTrailingBlank(); updateCount(); });
+
+    text.addEventListener("keydown", e => {
+      if ((e.key === "Backspace" || e.key === "Delete") && text.value === ""){
+        e.preventDefault(); li.remove(); ensureTrailingBlank(); saveInputsToState(); updateCount();
+      }
+      if (e.key === "Enter"){ e.preventDefault(); addItem(); }
+    });
+
+    // drag and drop
+    li.addEventListener("dragstart", e => { li.classList.add("dragging"); e.dataTransfer.setData("text/plain",""); });
+    li.addEventListener("dragend", () => li.classList.remove("dragging"));
+    li.addEventListener("dragover", e => {
+      e.preventDefault();
+      const dragging = tasksEl.querySelector(".dragging");
+      if (!dragging || dragging === li) return;
+      const rect = li.getBoundingClientRect();
+      const before = e.clientY < rect.top + rect.height / 2;
+      li.classList.add("dragover");
+      tasksEl.insertBefore(dragging, before ? li : li.nextSibling);
+    });
+    li.addEventListener("dragleave", () => li.classList.remove("dragover"));
+    li.addEventListener("drop", e => { e.preventDefault(); li.classList.remove("dragover"); saveInputsToState(); });
+
+    li.append(cb,text,drag);
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "del";
+    del.title = "Delete this task";
+    del.setAttribute("aria-label", "Delete task");
+    del.textContent = "✕";
+    del.addEventListener("click", () => {
+      li.remove();
+      saveInputsToState();
+      updateCount();
+    });
+    li.appendChild(del);
+
+    return li;
+  }
+
+  function addItem(prefill=""){
+    ensureTrailingBlank();
+    const text = tasksEl.lastChild.querySelector('input[type="text"]');
+    if (prefill) {
+      text.value = prefill;
+      ensureTrailingBlank();
+    }
+    text.focus();
+    saveInputsToState();
+    updateCount();
+  }
+
+  // Read inputs into current list object
+  function readInputs(){
+    const items = [...tasksEl.querySelectorAll("li.task")].map(li => {
+      const [cb, text] = li.querySelectorAll("input");
+      return {text: text.value.trim(), done: cb.checked};
+    }).filter(item => item.text !== "");
+    return {
+      title: titleEl.value.trim(),
+      date: dateEl.value || todayISO(),
+      notes: notesEl.value,
+      tasks: items
+    };
+  }
+
+  function writeInputs(list){
+    titleEl.value = list.title || "";
+    dateEl.value = list.date || todayISO();
+    notesEl.value = list.notes || "";
+    tasksEl.innerHTML = "";
+    const items = list.tasks || [];
+    if (items.length){
+      items.forEach(t => tasksEl.appendChild(buildTask(t)));
+    }else{
+      tasksEl.appendChild(buildTask({text:"",done:false}));
+    }
+    updateCount();
+  }
+
+  // Persisting
+  function saveState(){
+    const nextSnapshot = JSON.stringify(state);
+    if (!isRestoringHistory && lastSavedSnapshot && nextSnapshot !== lastSavedSnapshot){
+      undoStack.push(lastSavedSnapshot);
+      if (undoStack.length > 100) undoStack.shift();
+      redoStack.length = 0;
+    }
+    queueSave(nextSnapshot);
+    lastSavedSnapshot = nextSnapshot;
+    updateHistoryButtons();
+  }
+
+  function queueSave(snapshot){
+    pendingSnapshot = snapshot;
+    clearTimeout(statusTimer);
+    autosaveEl.textContent = saveConflict ? "Save conflict — export your changes, then reload" : "Saving…";
+    persistPending();
+  }
+
+  async function persistPending(){
+    if (saving || saveConflict || pendingSnapshot === null) return;
+    clearTimeout(retryTimer);
+    saving = true;
+    try {
+      while (pendingSnapshot !== null){
+        const snapshot = pendingSnapshot;
+        const response = await fetch("/api/state", {
+          method: "PUT",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({revision, state: JSON.parse(snapshot)})
+        });
+        if (!response.ok){
+          saveConflict = response.status === 409;
+          const error = await response.json();
+          throw new Error(error.error || "Could not save");
+        }
+        revision = (await response.json()).revision;
+        if (pendingSnapshot === snapshot) pendingSnapshot = null;
+      }
+      if (saveTimer === null) showSaved();
+    } catch (error){
+      autosaveEl.textContent = `Not saved: ${error.message}`;
+      if (!saveConflict) retryTimer = setTimeout(persistPending, 3000);
+    } finally {
+      saving = false;
+    }
+  }
+  let saveTimer=null;
+  function saveCurrentFromInputs(){
+    clearTimeout(saveTimer);
+    saveTimer = null;
+    if (!state.currentId) return;
+    const idx = state.lists.findIndex(l => l.id === state.currentId);
+    if (idx !== -1){
+      const data = readInputs();
+      state.lists[idx] = {...state.lists[idx], ...data};
+      saveState();
+      renderNav();
+    }
+  }
+  function saveInputsToStateDebounced(){
+    autosaveEl.textContent = "Saving…";
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveCurrentFromInputs, 300);
+  }
+  function saveInputsToState(){ autosaveEl.textContent = "Saving…"; clearTimeout(saveTimer); saveCurrentFromInputs(); }
+  function showSaved(){
+    autosaveEl.textContent = "Saved just now";
+    clearTimeout(statusTimer);
+    statusTimer = setTimeout(()=>{
+      if (pendingSnapshot === null && saveTimer === null) autosaveEl.textContent="All changes saved";
+    },1200);
+  }
+
+  function updateHistoryButtons(){
+    undoBtn.disabled = undoStack.length === 0;
+    redoBtn.disabled = redoStack.length === 0;
+  }
+
+  function restoreSnapshot(snapshot, message){
+    isRestoringHistory = true;
+    state = JSON.parse(snapshot);
+    queueSave(snapshot);
+    lastSavedSnapshot = snapshot;
+    isRestoringHistory = false;
+    initDarkMode();
+    renderAll();
+    updateHistoryButtons();
+    autosaveEl.textContent = `${message}; saving…`;
+  }
+
+  function undo(){
+    if (saveTimer !== null){
+      clearTimeout(saveTimer);
+      saveCurrentFromInputs();
+      clearTimeout(saveTimer);
+    }
+    if (!undoStack.length) return updateHistoryButtons();
+    const previous = undoStack.pop();
+    if (lastSavedSnapshot) redoStack.push(lastSavedSnapshot);
+    restoreSnapshot(previous, "Last action undone");
+  }
+
+  function redo(){
+    if (saveTimer !== null){
+      clearTimeout(saveTimer);
+      saveCurrentFromInputs();
+      clearTimeout(saveTimer);
+    }
+    if (!redoStack.length) return updateHistoryButtons();
+    const next = redoStack.pop();
+    if (lastSavedSnapshot) undoStack.push(lastSavedSnapshot);
+    restoreSnapshot(next, "Last action redone");
+  }
+
+  // Dark mode functions
+  function toggleDarkMode(){
+    const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+    document.documentElement.setAttribute("data-theme", isDark ? "light" : "dark");
+    darkModeToggle.textContent = isDark ? "🌙" : "☀️";
+    state.theme = isDark ? "light" : "dark";
+    saveState();
+  }
+
+  function initDarkMode(){
+    const savedTheme = state.theme || "dark";
+    document.documentElement.setAttribute("data-theme", savedTheme);
+    darkModeToggle.textContent = savedTheme === "dark" ? "☀️" : "🌙";
+  }
+
+  // Render everything
+  function renderAll(){
+    const current = state.lists.find(l => l.id === state.currentId);
+    if (!current){
+      // create first list
+      const id = uid();
+      const list = {id, title:"", date:todayISO(), notes:"", tasks:[]};
+      state.lists.push(list); state.currentId = id; saveState();
+    }
+    renderNav();
+    writeInputs(state.lists.find(l => l.id === state.currentId)); ensureTrailingBlank(); ensureTrailingBlank();
+  }
+
+  function updateCount(){
+    const tasks = [...tasksEl.querySelectorAll("li.task")].filter(li =>
+      li.querySelector('input[type="text"]').value.trim() !== ""
+    );
+    const done = tasks.filter(li => li.querySelector(".cb").checked).length;
+    const total = tasks.length;
+    countEl.textContent = `${done} of ${total} complete`;
+  }
+
+  function reorderLists(){
+    const buttons = [...listsNav.querySelectorAll("button")];
+    const newOrder = buttons.map(btn =>
+      state.lists.find(list => list.id === btn.dataset.listId)
+    ).filter(Boolean);
+
+    if (newOrder.length === state.lists.length) {
+      state.lists = newOrder;
+      saveState();
+    }
+  }
+
+  // Import and export all lists
+  function exportAll(){
+    saveCurrentFromInputs();
+    const data = JSON.stringify(state, null, 2);
+    const blob = new Blob([data], {type:"application/json"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+
+    const dates = state.lists.map(l => l.date).filter(Boolean).sort();
+    let filename;
+    if (dates.length > 1 && dates[0] !== dates[dates.length-1]){
+      filename = `${toYYMMDD(dates[0])}-${toYYMMDD(dates[dates.length-1])}-lists.json`;
+    }else{
+      const cur = state.lists.find(l => l.id === state.currentId) || {date:todayISO(), title:"list"};
+      filename = `${toYYMMDD(cur.date)}-${safe(cur.title)}.json`;
+    }
+
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(a.href);
+  }
+
+  function importAll(file){
+    const reader = new FileReader();
+    reader.onload = () => {
+      try{
+        const parsed = JSON.parse(String(reader.result));
+
+        // Accept either full state or an array or a single list
+        let incoming = {currentId:null, lists:[]};
+        if (Array.isArray(parsed)) incoming.lists = parsed;
+        else if (parsed && Array.isArray(parsed.lists)) incoming = parsed;
+        else if (parsed && Array.isArray(parsed.tasks)) incoming.lists = [parsed];
+        else throw new Error("Invalid list data");
+
+        // Normalize each list
+        incoming.lists = incoming.lists.map(l => ({
+          id: l.id || uid(),
+          title: l.title || "",
+          date: l.date || todayISO(),
+          notes: l.notes || "",
+          tasks: Array.isArray(l.tasks) ? l.tasks.map(t => ({text:t.text || "", done: !!t.done})) : []
+        }));
+
+        if (new Set(incoming.lists.map(list => list.id)).size !== incoming.lists.length){
+          throw new Error("Duplicate list IDs");
+        }
+        saveCurrentFromInputs();
+        state = {
+          currentId: incoming.currentId && incoming.lists.find(x => x.id === incoming.currentId) ? incoming.currentId : (incoming.lists[0]?.id || uid()),
+          lists: incoming.lists,
+          theme: state.theme
+        };
+        saveState();
+        renderAll();
+      }catch(e){
+        alert("Could not read this file. It should be a JSON file exported from this app.");
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  // List actions
+  function newList(){
+    saveCurrentFromInputs();
+    const id = uid();
+    state.lists.push({id, title:"", date:todayISO(), notes:"", tasks:[]});
+    state.currentId = id;
+    saveState();
+    renderAll();
+  }
+  function duplicateList(){
+    saveCurrentFromInputs();
+    const cur = state.lists.find(l => l.id === state.currentId);
+    if (!cur) return;
+    const clone = JSON.parse(JSON.stringify(cur));
+    clone.id = uid();
+    clone.title = cur.title ? `${cur.title} Copy` : "Copy";
+    state.lists.push(clone);
+    state.currentId = clone.id;
+    saveState();
+    renderAll();
+  }
+  function deleteList(){
+    if (!confirm("Delete this list?")) return;
+    const idx = state.lists.findIndex(l => l.id === state.currentId);
+    if (idx === -1) return;
+    state.lists.splice(idx,1);
+    if (state.lists.length === 0){
+      const id = uid();
+      state.lists.push({id, title:"", date:todayISO(), notes:"", tasks:[]});
+      state.currentId = id;
+    }else{
+      state.currentId = state.lists[Math.max(0, idx-1)].id;
+    }
+    saveState();
+    renderAll();
+  }
+
+  function copyIncompleteToNext(){
+    saveCurrentFromInputs();
+    const currentList = state.lists.find(l => l.id === state.currentId);
+    if (!currentList || !currentList.date) {
+      alert("Current list doesn't have a date.");
+      return;
+    }
+
+    // Find the next chronological day
+    const currentDate = new Date(currentList.date);
+    const nextDate = new Date(currentDate);
+    nextDate.setDate(currentDate.getDate() + 1);
+    const nextDateISO = nextDate.toISOString().split('T')[0];
+
+    const nextList = state.lists.find(l => l.date === nextDateISO);
+    if (!nextList) {
+      alert(`No list found for the next day (${nextDateISO}).`);
+      return;
+    }
+
+    // Get incomplete tasks from current list
+    const incompleteTasks = (currentList.tasks || []).filter(task => !task.done && task.text.trim());
+
+    if (incompleteTasks.length === 0) {
+      alert("No incomplete items to copy.");
+      return;
+    }
+
+    // Add incomplete tasks to next list (at the top)
+    const nextListTasks = nextList.tasks || [];
+    incompleteTasks.forEach(task => {
+      nextListTasks.unshift({...task, done: false});
+    });
+
+    // Update next list
+    const nextListIdx = state.lists.findIndex(l => l.id === nextList.id);
+    state.lists[nextListIdx] = {
+      ...nextList,
+      tasks: nextListTasks
+    };
+
+    saveState();
+    renderAll();
+
+    // Switch to next list to show the copied items
+    state.currentId = nextList.id;
+    saveState();
+    renderAll();
+
+    alert(`Copied ${incompleteTasks.length} incomplete item(s) to ${nextDateISO}.`);
+  }
+
+  // Week creation
+  function ensureListForDate(isoDate, titleIfNew){
+    // If a list with this date exists, return its id
+    const existing = state.lists.find(l => l.date === isoDate);
+    if (existing) return existing.id;
+    const id = uid();
+    state.lists.push({id, title:titleIfNew || "", date:isoDate, notes:"", tasks:[]});
+    return id;
+  }
+  function createWeek(startMondayISO, days = 7){
+    saveCurrentFromInputs();
+    const ids = [];
+    for (let i=0;i<days;i++){
+      const iso = addDaysISO(startMondayISO, i);
+      const title = i < DOW_TITLES.length ? DOW_TITLES[i] : `Day ${i+1}`;
+      ids.push(ensureListForDate(iso, title));
+    }
+    // Focus Monday
+    state.currentId = state.lists.find(l => l.date === startMondayISO)?.id || ids[0];
+    saveState();
+    renderAll();
+  }
+
+  // Wire events
+  addBtn.addEventListener("click", () => addItem());
+  clearDoneBtn.addEventListener("click", () => {
+    [...tasksEl.querySelectorAll("li.task")].forEach(li => { if (li.querySelector(".cb").checked) li.remove(); });
+    saveInputsToState(); updateCount();
+  });
+  copyIncompleteBtn.addEventListener("click", copyIncompleteToNext);
+  undoBtn.addEventListener("click", undo);
+  redoBtn.addEventListener("click", redo);
+
+  [titleEl, dateEl, notesEl].forEach(el => el.addEventListener("input", saveInputsToStateDebounced));
+  exportBtn.addEventListener("click", exportAll);
+  importInput.addEventListener("change", e => { const f = e.target.files[0]; if (f) importAll(f); e.target.value=""; });
+  printBtn.addEventListener("click", () => window.print());
+  addListBtn.addEventListener("click", newList);
+  duplicateListBtn.addEventListener("click", duplicateList);
+  deleteListBtn.addEventListener("click", deleteList);
+  darkModeToggle.addEventListener("click", toggleDarkMode);
+
+  // Week tools events
+  thisWeekBtn.addEventListener("click", () => {
+    const today = todayISO();
+    const days = parseInt(daysCountInput.value) || 7;
+    createWeek(today, days);
+  });
+  fromDateBtn.addEventListener("click", () => {
+    const picked = weekStartInput.value || todayISO();
+    const days = parseInt(daysCountInput.value) || 7;
+    createWeek(picked, days);
+  });
+
+  // Load server state before enabling editing. Read localStorage only for migration.
+  async function initialize(){
+    autosaveEl.textContent = "Loading…";
+    try {
+      const response = await fetch("/api/state");
+      if (!response.ok) throw new Error("Could not load saved lists");
+      const stored = await response.json();
+      revision = stored.revision;
+      if (stored.state){
+        state = stored.state;
+        lastSavedSnapshot = JSON.stringify(state);
+      } else {
+        let legacy = null;
+        let theme = "dark";
+        try {
+          const saved = localStorage.getItem(STORAGE_KEY);
+          if (saved) legacy = JSON.parse(saved);
+          theme = localStorage.getItem(DARK_MODE_KEY) || "dark";
+        } catch {}
+        if (legacy && Array.isArray(legacy.lists)) state = legacy;
+        state.theme = theme === "light" ? "light" : "dark";
+      }
+      initDarkMode();
+      renderAll();
+      if (!stored.state) saveState();
+      else autosaveEl.textContent = "All changes saved";
+      ready = true;
+      document.querySelector(".app").inert = false;
+      updateHistoryButtons();
+    } catch (error){
+      autosaveEl.textContent = `Could not load: ${error.message}. Start the Python server and reload.`;
+    }
+  }
+
+  window.addEventListener("beforeunload", event => {
+    if (ready && (saveTimer !== null || pendingSnapshot !== null || saving)){
+      saveCurrentFromInputs();
+      event.preventDefault();
+      event.returnValue = "";
+    }
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (ready && document.visibilityState === "hidden" && saveTimer !== null) saveCurrentFromInputs();
+  });
+  initialize();
+})();
+</script>
+</body>
+</html>
