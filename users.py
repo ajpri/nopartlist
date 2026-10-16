@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import secrets
 import sqlite3
+import sys
 import unicodedata
 import warnings
 
@@ -44,7 +45,7 @@ def check_password(password, stored):
     return hmac.compare_digest(actual.hex(), expected)
 
 
-def create_user(path, username, password):
+def create_user(path, username, password, *, only_if_empty=False):
     username = validate_username(username)
     hashed = password_hash(password)
     initialize_database(path)
@@ -52,6 +53,8 @@ def create_user(path, username, password):
         with connect(path) as db:
             db.execute("BEGIN IMMEDIATE")
             first = not db.execute("SELECT 1 FROM users LIMIT 1").fetchone()
+            if only_if_empty and not first:
+                raise ValueError("Another user was created during setup. Use manage-users to manage accounts.")
             user_id = db.execute("INSERT INTO users (username, username_key, password_hash) VALUES (?, ?, ?)",
                                  (username, username.casefold(), hashed)).lastrowid
             db.execute("INSERT INTO user_state (user_id) VALUES (?)", (user_id,))
@@ -90,6 +93,29 @@ def confirmed_password():
     if password != confirmation:
         raise ValueError("Passwords do not match.")
     return password
+
+
+def configure_on_startup(path):
+    with connect(path) as db:
+        if db.execute("SELECT 1 FROM users LIMIT 1").fetchone():
+            return
+    print("No users configured. Sign-in requires an account. The first user will own any existing lists.", flush=True)
+    try:
+        if not sys.stdin.isatty():
+            print("No interactive terminal available; first-user setup skipped.")
+        elif input("Create the first user now? [y/N; Enter skips] ").strip().lower() in {"y", "yes"}:
+            username = validate_username(input("Username: "))
+            create_user(path, username, confirmed_password(), only_if_empty=True)
+            print("User created. You can now sign in.", flush=True)
+            return
+        else:
+            print("First-user setup skipped.")
+    except (EOFError, KeyboardInterrupt, OSError, getpass.GetPassWarning):
+        print("\nSetup cancelled or protected password input unavailable.")
+    except (ValueError, sqlite3.Error) as exc:
+        print(f"Setup did not complete: {exc}")
+    print("The server will keep running; sign-in stays blocked until an account exists.\n"
+          "In another terminal, run ./startLinux.sh manage-users or python3 users.py create USERNAME.", flush=True)
 
 
 def list_users(path):

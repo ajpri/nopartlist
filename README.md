@@ -56,7 +56,20 @@ Optional server flags: `--port 1998`, `--host 127.0.0.1` (local access only),
 ## Accounts and sessions
 
 There are no default credentials and no public signup. Create the first account
-in an interactive terminal:
+at startup: when the database has no users, both `./startLinux.sh` and
+`python3 server.py` offer **Create the first user now?** in the terminal.
+Accept to enter a username and a hidden, confirmed password. The first account
+receives any existing lists.
+
+Press Enter or answer no to skip setup. Cancellation or invalid input also leaves
+the server running with sign-in blocked until an account is created. In a
+noninteractive session (such as a service), setup is skipped automatically;
+the server prints account-management instructions. Existing users suppress the
+prompt, including when all accounts are disabled; use user management to enable
+an account. `--yes` accepts dependency installation only, not account creation.
+The browser never offers signup.
+
+You can also create the first account later from an interactive terminal:
 
 ```sh
 ./startLinux.sh manage-users

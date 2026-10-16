@@ -93,7 +93,7 @@ fi
         process = subprocess.Popen(
             [str(self.project / "startLinux.sh"), "--port", str(port)],
             cwd="/tmp", env=self.env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            text=True,
+            stdin=subprocess.DEVNULL, text=True,
         )
         try:
             deadline = time.monotonic() + 5
@@ -114,6 +114,8 @@ fi
             stdout, stderr = process.communicate(timeout=5)
             self.assertEqual(process.returncode, 0, stderr)
             self.assertIn("Press Ctrl+C to stop", stdout)
+            self.assertIn("No interactive terminal available; first-user setup skipped", stdout)
+            self.assertIn("server will keep running", stdout)
             self.assertIn(f"0.0.0.0:{port}", stdout)
             with socket.socket() as sock:
                 sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)

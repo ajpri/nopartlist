@@ -7,7 +7,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from auth import Authentication
 from database import DEFAULT_DATABASE, connect, initialize_database, read_state, write_state
-from users import validate_username
+from users import configure_on_startup, validate_username
 
 ROOT = Path(__file__).resolve().parent
 MAX_BODY = 10 * 1024 * 1024
@@ -190,11 +190,9 @@ def main():
     args = parser.parse_args()
     initialize_database(args.database)
     server = ThreadingHTTPServer((args.host, args.port), make_handler(args.database, args.secure_cookie))
-    with connect(args.database) as db:
-        if not db.execute("SELECT 1 FROM users LIMIT 1").fetchone():
-            print("No users configured. Run ./startLinux.sh manage-users or python3 users.py create USERNAME.", flush=True)
-    print(f"No Part List: http://{args.host}:{args.port} (database: {args.database})", flush=True)
     try:
+        configure_on_startup(args.database)
+        print(f"No Part List: http://{args.host}:{args.port} (database: {args.database})", flush=True)
         server.serve_forever()
     except KeyboardInterrupt:
         pass
