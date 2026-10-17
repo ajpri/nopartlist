@@ -63,6 +63,39 @@ class PersistenceTests(unittest.TestCase):
         self.assertEqual(self.request(payload={"revision": 0, "state": changed})[0], 409)
         self.assertEqual(json.loads(self.request()[1])["state"], self.state)
 
+    def test_conflict_recovery_preserves_winner_and_loser_and_is_idempotent(self):
+        self.request(payload={"revision": 0, "state": self.state})
+        losing = copy.deepcopy(self.state)
+        losing["lists"][0]["title"] = "Edits from another device"
+        self.assertEqual(self.request(payload={"revision": 0, "state": losing})[0], 409)
+        payload = {"recoveryId": "recovery123", "state": losing}
+        status, body = self.client.request("/api/recovery", payload, method="POST")
+        self.assertEqual(status, 200)
+        result = json.loads(body)
+        self.assertEqual(result["recoveredCount"], 1)
+        self.assertEqual(result["state"]["lists"][0], self.state["lists"][0])
+        self.assertEqual(result["state"]["lists"][1]["title"], "Edits from another device (Recovered)")
+        self.assertNotEqual(result["state"]["lists"][1]["id"], "one")
+        repeated = json.loads(self.client.request("/api/recovery", payload, method="POST")[1])
+        self.assertEqual(repeated["revision"], result["revision"])
+        self.assertEqual(repeated["state"], result["state"])
+        self.assertEqual(json.loads(self.client.request("/api/recovery/recovery123")[1]), losing)
+
+    def test_recovery_does_not_delete_newer_lists_or_cross_accounts(self):
+        self.request(payload={"revision": 0, "state": self.state})
+        deleted = {"currentId": None, "theme": "light", "lists": []}
+        payload = {"recoveryId": "deletion123", "state": deleted}
+        self.assertEqual(self.client.request("/api/recovery", payload, method="POST", csrf=False)[0], 403)
+        self.client.request("/api/recovery", payload, method="POST")
+        self.assertEqual(json.loads(self.request()[1])["state"], self.state)
+        self.assertEqual(json.loads(self.client.request("/api/recovery/deletion123")[1]), deleted)
+        create_user(self.database, "bob", "test password")
+        bob = Client(self.url)
+        bob.login("bob")
+        self.assertEqual(bob.request("/api/recovery/deletion123")[0], 404)
+        self.assertEqual(bob.request("/api/recovery", payload, method="POST")[0], 200)
+        self.assertEqual(json.loads(self.request()[1])["state"], self.state)
+
     def test_invalid_data_does_not_replace_saved_state(self):
         self.request(payload={"revision": 0, "state": self.state})
         for invalid in (None, {}, {**self.state, "currentId": "missing"},

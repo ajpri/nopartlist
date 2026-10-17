@@ -127,7 +127,12 @@ Import replaces only the signed-in user's lists; Undo can restore them during
 the session. Existing data already in SQLite is assigned to the first account.
 
 Save failures appear beside the task count and retry after connection failures.
-If another tab changes the database, export any unsaved edits before reloading.
+If another tab or device saves first, newer server data is kept and differing
+lists from your unsaved snapshot are added as **(Recovered)** copies. The app
+shows a recovery notice with a download of the original snapshot, including
+its list order, deletions, and preferences. Recovery never applies deletions to
+newer data. The full snapshot is also retained privately in SQLite. Repeated
+requests for the same recovery do not create duplicate copies.
 An unsaved-changes prompt helps prevent closing a tab before saving finishes.
 If a session expires, export unsaved edits before following **Sign in again**.
 An old tab cannot save to a different user's account after an account switch.
@@ -142,6 +147,7 @@ Calendar-date regression checks require Node.js and cover six time zones:
 
 ```sh
 node tests/test_dates.js
+node tests/test_recovery.js
 ```
 
 ## GitHub

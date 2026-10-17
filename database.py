@@ -3,6 +3,7 @@ from contextlib import contextmanager
 import json
 from pathlib import Path
 import sqlite3
+import uuid
 
 DEFAULT_DATABASE = Path(__file__).resolve().parent / "no_part_list.sqlite3"
 
@@ -45,6 +46,13 @@ def initialize_database(path):
                 data TEXT NOT NULL,
                 UNIQUE(owner_id, client_id)
             );
+            CREATE TABLE IF NOT EXISTS recoveries (
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                recovery_id TEXT NOT NULL,
+                snapshot TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY(user_id, recovery_id)
+            );
         """)
 
 
@@ -74,6 +82,32 @@ def write_state(db, user_id, revision, state):
     db.executemany("DELETE FROM lists WHERE owner_id = ? AND client_id = ?",
                    [(user_id, list_id) for list_id in existing])
     return True
+
+
+def recover_state(db, user_id, recovery_id, snapshot):
+    """Preserve a losing snapshot and append changed lists without replacing winners.
+
+    The caller holds an IMMEDIATE transaction. Recovery IDs make retries safe
+    even when the first response was lost after committing.
+    """
+    revision, current = read_state(db, user_id)
+    inserted = db.execute("INSERT OR IGNORE INTO recoveries (user_id, recovery_id, snapshot) VALUES (?, ?, ?)",
+                          (user_id, recovery_id, json.dumps(snapshot))).rowcount
+    if not inserted:
+        return revision, current, 0
+    current = current or {"currentId": None, "theme": snapshot["theme"], "lists": []}
+    existing = {item["id"]: item for item in current["lists"]}
+    recovered = []
+    for item in snapshot["lists"]:
+        if existing.get(item["id"]) != item:
+            recovered.append({**item, "id": uuid.uuid4().hex,
+                              "title": f"{item['title'] or 'Untitled'} (Recovered)"})
+    if recovered:
+        current["lists"].extend(recovered)
+        current["currentId"] = recovered[0]["id"]
+        write_state(db, user_id, revision, current)
+        revision += 1
+    return revision, current, len(recovered)
 
 
 def claim_legacy_state(db, user_id):

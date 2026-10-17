@@ -6,7 +6,7 @@ import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from auth import Authentication
-from database import DEFAULT_DATABASE, connect, initialize_database, read_state, write_state
+from database import DEFAULT_DATABASE, connect, initialize_database, read_state, recover_state, write_state
 from users import configure_on_startup, validate_username
 
 ROOT = Path(__file__).resolve().parent
@@ -116,6 +116,14 @@ def make_handler(database, secure_cookie=False):
                     "setupRequired": setup_required,
                 }, cookie=cookie)
             if path != "/api/state":
+                if path.startswith("/api/recovery/"):
+                    authorized = self.require_user()
+                    if not authorized:
+                        return
+                    with connect(database) as db:
+                        row = db.execute("SELECT snapshot FROM recoveries WHERE user_id = ? AND recovery_id = ?",
+                                         (authorized[1]["userId"], path.removeprefix("/api/recovery/"))).fetchone()
+                    return self.respond(200, json.loads(row["snapshot"])) if row else self.respond(404, {"error": "Recovery not found"})
                 return self.respond(404, {"error": "Not found"})
             authorized = self.require_user()
             if authorized:
@@ -124,6 +132,8 @@ def make_handler(database, secure_cookie=False):
                 self.respond(200, {"revision": revision, "state": state})
 
         def do_POST(self):
+            if self.path == "/api/recovery":
+                return self.recover_snapshot()
             if self.path not in ("/api/login", "/api/logout"):
                 return self.respond(404, {"error": "Not found"})
             payload = self.read_json()
@@ -151,6 +161,29 @@ def make_handler(database, secure_cookie=False):
             except ValueError as exc:
                 return self.respond(429, {"error": str(exc)})
             self.respond(200, {"status": "ok"}, cookie=cookie)
+
+        def recover_snapshot(self):
+            authorized = self.require_user()
+            if not authorized:
+                return
+            payload = self.read_json()
+            if payload is None:
+                return
+            try:
+                snapshot = validate_state(payload.get("state"))
+                recovery_id = payload.get("recoveryId")
+                if not isinstance(recovery_id, str) or not 1 <= len(recovery_id) <= 128 or not recovery_id.isalnum():
+                    raise ValueError("Invalid recovery ID.")
+            except ValueError as exc:
+                return self.respond(400, {"error": str(exc)})
+            session = authorized[1]
+            with connect(database) as db:
+                db.execute("BEGIN IMMEDIATE")
+                user = db.execute("SELECT active, auth_version FROM users WHERE id = ?", (session["userId"],)).fetchone()
+                if not user or not user["active"] or user["auth_version"] != session["authVersion"]:
+                    return self.respond(401, {"error": "Session revoked. Sign in again."})
+                revision, state, count = recover_state(db, session["userId"], recovery_id, snapshot)
+            self.respond(200, {"revision": revision, "state": state, "recoveredCount": count})
 
         def do_PUT(self):
             if self.path != "/api/state":

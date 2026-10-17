@@ -166,6 +166,10 @@
   </aside>
 
   <main class="paper" role="application" aria-label="Todo list">
+    <section id="recoveryNotice" hidden aria-live="polite">
+      <p>Newer changes were kept. Your unsaved lists were preserved as recovered copies.
+        <button id="downloadRecovery" type="button">Download original snapshot</button></p>
+    </section>
     <div class="top">
       <div class="date"><input id="date" type="date" aria-label="Date" /></div>
       <input id="title" class="title" type="text" placeholder="Title" />
@@ -249,6 +253,8 @@
   let ready = false;
   document.querySelector(".app").inert = true;
   let isRestoringHistory = false;
+  let recoveryAttempt = null;
+  let recoveredSnapshot = null;
 
   // Utils
   const uid = () => Math.random().toString(36).slice(2,10);
@@ -482,8 +488,11 @@
           headers: {"Content-Type": "application/json", "X-CSRF-Token": csrfToken},
           body: JSON.stringify({revision, state: JSON.parse(snapshot)})
         });
+        if (response.status === 409){
+          await recoverConflict();
+          break;
+        }
         if (!response.ok){
-          saveConflict = response.status === 409;
           if (response.status === 401 || response.status === 403){
             authExpired = true;
             $("#signInAgain").hidden = false;
@@ -502,6 +511,52 @@
       saving = false;
     }
   }
+  async function recoverConflict(){
+    const app = document.querySelector(".app");
+    app.inert = true;
+    try {
+      // Include edits still waiting for the input debounce before freezing the UI.
+      saveCurrentFromInputs();
+      const snapshot = pendingSnapshot;
+      if (!recoveryAttempt || recoveryAttempt.snapshot !== snapshot){
+        recoveryAttempt = {id:Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, "0")).join(""), snapshot};
+      }
+      const response = await fetch("/api/recovery", {
+        method:"POST", headers:{"Content-Type":"application/json", "X-CSRF-Token":csrfToken},
+        body:JSON.stringify({recoveryId:recoveryAttempt.id, state:JSON.parse(snapshot)})
+      });
+      if (!response.ok){
+        if (response.status === 401 || response.status === 403){
+          authExpired = true;
+          $("#signInAgain").hidden = false;
+        }
+        throw new Error((await response.json()).error || "Could not preserve conflicting edits");
+      }
+      const result = await response.json();
+      recoveredSnapshot = snapshot;
+      state = result.state;
+      revision = result.revision;
+      pendingSnapshot = null;
+      lastSavedSnapshot = JSON.stringify(state);
+      undoStack.length = 0;
+      redoStack.length = 0;
+      recoveryAttempt = null;
+      $("#recoveryNotice").hidden = false;
+      initDarkMode();
+      renderAll();
+      updateHistoryButtons();
+    } finally {
+      app.inert = false;
+    }
+  }
+  $("#downloadRecovery").addEventListener("click", () => {
+    if (!recoveredSnapshot) return;
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([recoveredSnapshot], {type:"application/json"}));
+    link.download = "no-part-list-recovery.json";
+    link.click();
+    URL.revokeObjectURL(link.href);
+  });
   let saveTimer=null;
   function saveCurrentFromInputs(){
     clearTimeout(saveTimer);
