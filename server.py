@@ -110,10 +110,12 @@ def make_handler(database, secure_cookie=False):
                         return self.respond(429, {"error": str(exc)})
                 with connect(database) as db:
                     setup_required = not db.execute("SELECT 1 FROM users LIMIT 1").fetchone()
+                    storage_scope = db.execute("SELECT value FROM settings WHERE key = 'storage_scope'").fetchone()[0]
                 return self.respond(200, {
                     "user": {"id": session["userId"], "username": session["username"]} if session.get("userId") else None,
                     "csrfToken": session["csrfToken"], "expiresAt": session["expiresAt"],
                     "setupRequired": setup_required,
+                    "storageScope": storage_scope if session.get("userId") else None,
                 }, cookie=cookie)
             if path != "/api/state":
                 if path.startswith("/api/recovery/"):

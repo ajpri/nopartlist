@@ -23,6 +23,10 @@ def connect(path):
 def initialize_database(path):
     with connect(path) as db:
         db.executescript("""
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT NOT NULL,
@@ -54,6 +58,7 @@ def initialize_database(path):
                 PRIMARY KEY(user_id, recovery_id)
             );
         """)
+        db.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('storage_scope', ?)", (uuid.uuid4().hex,))
 
 
 def read_state(db, user_id):

@@ -103,7 +103,7 @@
   }
   body { background:#fff !important; color:#000 !important; }
   .app { margin:0; padding:0; grid-template-columns:1fr }
-  .sidebar, .controls, .status { display:none }
+  .sidebar, .controls, .status, #unsavedNotice, #recoveryNotice, #localStorageWarning { display:none }
   .paper { box-shadow:none; border-radius:0 }
   .title { border-color:#000 }
   .notes textarea { border:1px solid #000 }
@@ -166,6 +166,12 @@
   </aside>
 
   <main class="paper" role="application" aria-label="Todo list">
+    <p id="localStorageWarning" hidden role="alert">This browser could not keep an offline copy. Keep this tab open or export unsaved changes.</p>
+    <section id="unsavedNotice" hidden aria-live="polite">
+      <p><span id="unsavedCount"></span>
+        <button id="syncUnsaved" type="button">Sync unsaved changes</button>
+        <button id="downloadUnsaved" type="button">Download unsaved changes</button></p>
+    </section>
     <section id="recoveryNotice" hidden aria-live="polite">
       <p>Newer changes were kept. Your unsaved lists were preserved as recovered copies.
         <button id="downloadRecovery" type="button">Download original snapshot</button></p>
@@ -249,12 +255,90 @@
   let saving = false;
   let retryTimer = null;
   let statusTimer = null;
-  let saveConflict = false;
   let ready = false;
   document.querySelector(".app").inert = true;
   let isRestoringHistory = false;
   let recoveryAttempt = null;
   let recoveredSnapshot = null;
+  let ownerId = null;
+  let storageScope = null;
+  let serverSnapshot = null;
+  let draftRecovery = null;
+  const newRecoveryId = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, "0")).join("");
+  const draftId = newRecoveryId();
+
+  // One durable queue entry per tab, namespaced by database and account.
+  function draftPrefix(){ return `paper_todo_drafts_v1:${storageScope}:${ownerId}:`; }
+  function draftKey(){ return draftPrefix() + draftId; }
+  function sameState(left, right){
+    const canonical = value => Array.isArray(value) ? value.map(canonical) :
+      value && typeof value === "object" ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])])) : value;
+    return JSON.stringify(canonical(left)) === JSON.stringify(canonical(right));
+  }
+  function storedDrafts(includeCurrent=false){
+    if (ownerId === null || !storageScope) return [];
+    try {
+      const drafts = [];
+      for (let i=0; i<localStorage.length; i++){
+        const key = localStorage.key(i);
+        if (!key || !key.startsWith(draftPrefix()) || (!includeCurrent && key === draftKey())) continue;
+        try {
+          const record = JSON.parse(localStorage.getItem(key));
+          if (record.version !== 1 || record.ownerId !== ownerId || record.storageScope !== storageScope ||
+              !Number.isInteger(record.baseRevision) || typeof record.snapshot !== "string" ||
+              !(record.baseSnapshot === null || typeof record.baseSnapshot === "string") ||
+              typeof record.recoveryId !== "string" || !/^[a-f0-9]{32}$/.test(record.recoveryId)) continue;
+          if (!Array.isArray(JSON.parse(record.snapshot).lists)) continue;
+          drafts.push({key, record});
+        } catch {}
+      }
+      return drafts.sort((a,b) => a.record.updatedAt - b.record.updatedAt);
+    } catch {
+      $("#localStorageWarning").hidden = false;
+      return [];
+    }
+  }
+  function refreshDraftNotice(){
+    const count = storedDrafts().length;
+    $("#unsavedNotice").hidden = count === 0;
+    $("#unsavedCount").textContent = `${count} unsaved draft${count === 1 ? "" : "s"} from this browser available.`;
+  }
+  function storeDraft(snapshot){
+    if (ownerId === null || !storageScope) return;
+    try {
+      const previous = JSON.parse(localStorage.getItem(draftKey()) || "null");
+      const recoveryId = previous && previous.snapshot === snapshot ? previous.recoveryId :
+        draftRecovery && draftRecovery.snapshot === snapshot ? draftRecovery.id : newRecoveryId();
+      draftRecovery = {id:recoveryId, snapshot};
+      const record = {version:1, ownerId, storageScope, snapshot, baseRevision:revision,
+        baseSnapshot:serverSnapshot, updatedAt:Date.now(),
+        recoveryId};
+      localStorage.setItem(draftKey(), JSON.stringify(record));
+    } catch { $("#localStorageWarning").hidden = false; }
+  }
+  function removeDraft(key, snapshot){
+    try {
+      const current = JSON.parse(localStorage.getItem(key) || "null");
+      if (current && current.snapshot === snapshot) localStorage.removeItem(key);
+    } catch { $("#localStorageWarning").hidden = false; }
+  }
+  function acknowledgeDraft(snapshot){
+    try {
+      const current = JSON.parse(localStorage.getItem(draftKey()) || "null");
+      if (!current) return;
+      if (current.snapshot === snapshot) localStorage.removeItem(draftKey());
+      else {
+        current.baseRevision = revision;
+        current.baseSnapshot = serverSnapshot;
+        localStorage.setItem(draftKey(), JSON.stringify(current));
+      }
+    } catch { $("#localStorageWarning").hidden = false; }
+  }
+  function captureInputDraft(){
+    if (!ready || ownerId === null) return;
+    const lists = state.lists.map(list => list.id === state.currentId ? {...list, ...readInputs()} : list);
+    storeDraft(JSON.stringify({...state, lists}));
+  }
 
   // Utils
   const uid = () => Math.random().toString(36).slice(2,10);
@@ -469,15 +553,15 @@
   }
 
   function queueSave(snapshot){
+    storeDraft(snapshot);
     pendingSnapshot = snapshot;
     clearTimeout(statusTimer);
-    autosaveEl.textContent = authExpired ? "Session ended — export unsaved changes, then sign in again" :
-      saveConflict ? "Save conflict — export your changes, then reload" : "Saving…";
+    autosaveEl.textContent = authExpired ? "Session ended — sign in again to sync unsaved changes" : "Saving…";
     persistPending();
   }
 
   async function persistPending(){
-    if (saving || saveConflict || authExpired || pendingSnapshot === null) return;
+    if (saving || authExpired || pendingSnapshot === null) return;
     clearTimeout(retryTimer);
     saving = true;
     try {
@@ -501,25 +585,30 @@
           throw new Error(error.error || "Could not save");
         }
         revision = (await response.json()).revision;
+        serverSnapshot = snapshot;
+        acknowledgeDraft(snapshot);
         if (pendingSnapshot === snapshot) pendingSnapshot = null;
       }
       if (saveTimer === null) showSaved();
     } catch (error){
       autosaveEl.textContent = `Not saved: ${error.message}`;
-      if (!saveConflict && !authExpired) retryTimer = setTimeout(persistPending, 3000);
+      if (!authExpired) retryTimer = setTimeout(persistPending, 3000);
     } finally {
       saving = false;
     }
   }
   async function recoverConflict(){
     const app = document.querySelector(".app");
+    const wasInert = app.inert;
     app.inert = true;
     try {
       // Include edits still waiting for the input debounce before freezing the UI.
       saveCurrentFromInputs();
       const snapshot = pendingSnapshot;
       if (!recoveryAttempt || recoveryAttempt.snapshot !== snapshot){
-        recoveryAttempt = {id:Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, "0")).join(""), snapshot};
+        const cached = storedDrafts(true).find(draft => draft.key === draftKey() && draft.record.snapshot === snapshot);
+        recoveryAttempt = {id:cached ? cached.record.recoveryId :
+          draftRecovery && draftRecovery.snapshot === snapshot ? draftRecovery.id : newRecoveryId(), snapshot};
       }
       const response = await fetch("/api/recovery", {
         method:"POST", headers:{"Content-Type":"application/json", "X-CSRF-Token":csrfToken},
@@ -536,6 +625,8 @@
       recoveredSnapshot = snapshot;
       state = result.state;
       revision = result.revision;
+      serverSnapshot = JSON.stringify(state);
+      acknowledgeDraft(snapshot);
       pendingSnapshot = null;
       lastSavedSnapshot = JSON.stringify(state);
       undoStack.length = 0;
@@ -546,7 +637,7 @@
       renderAll();
       updateHistoryButtons();
     } finally {
-      app.inert = false;
+      app.inert = wasInert;
     }
   }
   $("#downloadRecovery").addEventListener("click", () => {
@@ -554,6 +645,88 @@
     const link = document.createElement("a");
     link.href = URL.createObjectURL(new Blob([recoveredSnapshot], {type:"application/json"}));
     link.download = "no-part-list-recovery.json";
+    link.click();
+    URL.revokeObjectURL(link.href);
+  });
+  async function syncUnsavedDrafts(){
+    const app = document.querySelector(".app");
+    app.inert = true;
+    clearTimeout(statusTimer);
+    try {
+      if (saveTimer !== null) saveCurrentFromInputs();
+      const deadline = Date.now() + 10000;
+      while (saving && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 50));
+      if (pendingSnapshot !== null || saving || authExpired){
+        throw new Error("Save the current edits or sign in again before syncing older drafts. All drafts are kept in this browser.");
+      }
+      for (const draft of storedDrafts()){
+        const response = await fetch("/api/state", {headers:{"X-CSRF-Token":csrfToken}});
+        if (response.status === 401 || response.status === 403){
+          authExpired = true;
+          $("#signInAgain").hidden = false;
+        }
+        if (!response.ok) throw new Error("Could not load saved lists. Sign in again if the server restarted; drafts are kept.");
+        let result = await response.json();
+        const snapshot = JSON.parse(draft.record.snapshot);
+        if (!sameState(snapshot, result.state)){
+          const baseline = JSON.parse(draft.record.baseSnapshot);
+          // Rebase only when the server still has our acknowledged starting state.
+          // A revision match alone is insufficient after a database restore.
+          let writeResponse;
+          if (sameState(baseline, result.state)){
+            writeResponse = await fetch("/api/state", {
+              method:"PUT", headers:{"Content-Type":"application/json", "X-CSRF-Token":csrfToken},
+              body:JSON.stringify({revision:result.revision, state:snapshot})
+            });
+            if (writeResponse.ok) result = {revision:(await writeResponse.json()).revision, state:snapshot};
+          }
+          if (!writeResponse || writeResponse.status === 409){
+            writeResponse = await fetch("/api/recovery", {
+              method:"POST", headers:{"Content-Type":"application/json", "X-CSRF-Token":csrfToken},
+              body:JSON.stringify({recoveryId:draft.record.recoveryId, state:snapshot})
+            });
+            if (writeResponse.ok){
+              result = await writeResponse.json();
+              recoveredSnapshot = draft.record.snapshot;
+              $("#recoveryNotice").hidden = false;
+            }
+          }
+          if (writeResponse.status === 401 || writeResponse.status === 403){
+            authExpired = true;
+            $("#signInAgain").hidden = false;
+          }
+          if (!writeResponse.ok) throw new Error("Could not sync unsaved changes. They are still kept in this browser.");
+        }
+        // Remove only what was acknowledged; another tab may have edited meanwhile.
+        removeDraft(draft.key, draft.record.snapshot);
+        state = result.state;
+        revision = result.revision;
+        serverSnapshot = JSON.stringify(state);
+        lastSavedSnapshot = serverSnapshot;
+        undoStack.length = 0;
+        redoStack.length = 0;
+        initDarkMode();
+        renderAll();
+        updateHistoryButtons();
+      }
+      autosaveEl.textContent = "Unsaved changes synced";
+    } catch (error){
+      autosaveEl.textContent = error.message;
+    } finally {
+      refreshDraftNotice();
+      app.inert = false;
+    }
+  }
+  $("#syncUnsaved").addEventListener("click", syncUnsavedDrafts);
+  $("#downloadUnsaved").addEventListener("click", () => {
+    const drafts = storedDrafts();
+    if (!drafts.length) return;
+    const link = document.createElement("a");
+    const snapshot = drafts.flatMap(draft => JSON.parse(draft.record.snapshot).lists);
+    // Give each list a fresh ID so the combined backup can be imported directly.
+    const backup = snapshot.map(list => ({...list, id:newRecoveryId()}));
+    link.href = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], {type:"application/json"}));
+    link.download = "no-part-list-unsaved.json";
     link.click();
     URL.revokeObjectURL(link.href);
   });
@@ -571,6 +744,8 @@
     }
   }
   function saveInputsToStateDebounced(){
+    // Capture synchronously: closing during the debounce must not lose keystrokes.
+    captureInputDraft();
     autosaveEl.textContent = "Saving…";
     clearTimeout(saveTimer);
     saveTimer = setTimeout(saveCurrentFromInputs, 300);
@@ -887,11 +1062,17 @@
       const session = await sessionResponse.json();
       if (!session.user){ location.replace("/"); return; }
       csrfToken = session.csrfToken;
+      ownerId = session.user.id;
+      storageScope = session.storageScope;
       $("#signedInUser").textContent = session.user.username;
       const response = await fetch("/api/state", {headers:{"X-CSRF-Token":csrfToken}});
       if (response.status === 401 || response.status === 403){ location.replace("/"); return; }
       if (!response.ok) throw new Error("Could not load saved lists");
       const stored = await response.json();
+      serverSnapshot = stored.state ? JSON.stringify(stored.state) : null;
+      for (const draft of storedDrafts()){
+        if (sameState(JSON.parse(draft.record.snapshot), stored.state)) removeDraft(draft.key, draft.record.snapshot);
+      }
       revision = stored.revision;
       if (stored.state){
         state = stored.state;
@@ -906,6 +1087,7 @@
       ready = true;
       document.querySelector(".app").inert = false;
       updateHistoryButtons();
+      refreshDraftNotice();
     } catch (error){
       autosaveEl.textContent = `Could not load: ${error.message}. Start the Python server and reload.`;
     }
@@ -946,6 +1128,12 @@
   });
   document.addEventListener("visibilitychange", () => {
     if (ready && document.visibilityState === "hidden" && saveTimer !== null) saveCurrentFromInputs();
+  });
+  window.addEventListener("online", () => {
+    if (ready){ persistPending(); refreshDraftNotice(); }
+  });
+  window.addEventListener("storage", event => {
+    if (ready && event.key && event.key.startsWith(draftPrefix())) refreshDraftNotice();
   });
   initialize();
 })();

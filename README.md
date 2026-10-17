@@ -127,6 +127,22 @@ Import replaces only the signed-in user's lists; Undo can restore them during
 the session. Existing data already in SQLite is assigned to the first account.
 
 Save failures appear beside the task count and retry after connection failures.
+Every edit is also copied immediately to a browser-local draft queue, including
+keystrokes awaiting autosave. Closing the tab while offline or restarting the
+server no longer loses those drafts. When the server is reachable, sign in to
+the same account and choose **Sync unsaved changes**. The app only restores a
+draft directly when the server still matches its original starting state;
+otherwise it preserves differences as recovered lists. Lost save responses are
+recognized without overwriting newer work or duplicating recovered copies.
+**Download unsaved changes** provides an importable backup of draft lists.
+
+Drafts belong to one database and account and are never offered to another user.
+They stay on this browser and device until acknowledged by the server; they are
+stored unencrypted in localStorage, so use a trusted browser profile for private
+lists. Clearing site data removes unsynced drafts. If browser storage is blocked
+or full, the app warns you to keep the tab open or export changes. Reopening the
+app requires the server to be reachable; this is draft recovery, not an offline
+installation of the entire app.
 If another tab or device saves first, newer server data is kept and differing
 lists from your unsaved snapshot are added as **(Recovered)** copies. The app
 shows a recovery notice with a download of the original snapshot, including
@@ -134,7 +150,8 @@ its list order, deletions, and preferences. Recovery never applies deletions to
 newer data. The full snapshot is also retained privately in SQLite. Repeated
 requests for the same recovery do not create duplicate copies.
 An unsaved-changes prompt helps prevent closing a tab before saving finishes.
-If a session expires, export unsaved edits before following **Sign in again**.
+If a session expires, follow **Sign in again**, then sync the recovered drafts
+for the same account. Export first if the browser's offline-copy warning is shown.
 An old tab cannot save to a different user's account after an account switch.
 
 ## Check
@@ -148,6 +165,7 @@ Calendar-date regression checks require Node.js and cover six time zones:
 ```sh
 node tests/test_dates.js
 node tests/test_recovery.js
+node tests/test_offline.js
 ```
 
 ## GitHub

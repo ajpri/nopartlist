@@ -48,6 +48,17 @@ class UserTests(unittest.TestCase):
         self.assertFalse(check_password("x" * 129, one))
         self.assertFalse(check_password("\ud800", one))
 
+    def test_offline_storage_scope_survives_restart_but_not_database_replacement(self):
+        with connect(self.database) as db:
+            original = db.execute("SELECT value FROM settings WHERE key = 'storage_scope'").fetchone()[0]
+        initialize_database(self.database)
+        with connect(self.database) as db:
+            self.assertEqual(db.execute("SELECT value FROM settings WHERE key = 'storage_scope'").fetchone()[0], original)
+        other = Path(self.temp.name) / "other.sqlite3"
+        initialize_database(other)
+        with connect(other) as db:
+            self.assertNotEqual(db.execute("SELECT value FROM settings WHERE key = 'storage_scope'").fetchone()[0], original)
+
     def test_user_validation_and_case_insensitive_uniqueness(self):
         create_user(self.database, "Alice", "test password")
         for username, password in ((" alice ", "test password"), ("", "test password"),

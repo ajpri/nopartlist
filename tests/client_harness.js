@@ -36,13 +36,16 @@ function createHarness(fetch, storage = new Map()) {
     };
     globalThis.client = {
       saveState, queueSave, persistPending, recoverConflict, initialize,
+      captureInputDraft, saveInputsToStateDebounced, storedDrafts, syncUnsavedDrafts,
       getState: () => state,
       getRevision: () => revision,
       getPending: () => pendingSnapshot,
       getAuthExpired: () => authExpired,
       setState: value => { state = value; },
-      configure: (value, rev = 0) => {
+      configure: (value, rev = 0, userId = 1, scope = "testdb") => {
         state = value; revision = rev; csrfToken = "csrf"; ready = true;
+        document.querySelector(".app").inert = false;
+        ownerId = userId; storageScope = scope; serverSnapshot = JSON.stringify(value);
         lastSavedSnapshot = JSON.stringify(value);
       },
     };

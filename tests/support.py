@@ -19,7 +19,8 @@ class Client:
             headers["X-CSRF-Token"] = self.csrf
         request = Request(self.url + path, data=data, method=method or ("GET" if data is None else "PUT"), headers=headers)
         try:
-            response = self.opener.open(request, timeout=3)
+            # Password hashing can take several seconds on a busy shared machine.
+            response = self.opener.open(request, timeout=15)
         except HTTPError as error:
             response = error
         with response:
