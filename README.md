@@ -12,6 +12,24 @@ The web app also has a **Print** button for printing your current list.
 
 Requires Python 3.10 or newer. No packages to install.
 
+On Windows, double-click `startWindows.bat` or run it in a terminal:
+
+```powershell
+.\startWindows.bat
+.\startWindows.bat --check
+.\startWindows.bat --open --port 2000
+.\startWindows.bat manage-users
+```
+
+The batch file runs `startWindows.ps1` from its own folder with execution policy
+bypass for that process. Both launchers work from any current directory, including
+paths containing spaces. The Windows launcher supports the same options as the
+Linux launcher below. It finds Python using `py -3`, `python`, or `python3`, or
+uses the executable set in `$env:PYTHON`. If Python is missing, it offers to install
+Python 3.13 for the current user through WinGet. `--yes` accepts that installation;
+`--check` never installs anything or creates a database. User management and
+first-account setup work in the terminal as described below.
+
 On Linux, the launcher checks Python and SQLite, offers to install missing
 system dependencies, and starts the server:
 
@@ -44,7 +62,7 @@ Stop it with Ctrl+C. Lists, tasks, selected list, and theme are stored in
 The database is excluded from Git. Back it up while the server is stopped,
 or use **Export all** to download JSON.
 
-The server and Linux launcher listen on all interfaces (`0.0.0.0`) by default.
+The server and both launchers listen on all interfaces (`0.0.0.0`) by default.
 Open `http://<this-computer-ip>:1998` from another device on your network.
 Sign-in is required. Each account has its own lists, tasks, notes, selected list,
 and theme. Accounts are independent of No Part Finance. Sharing and collaboration

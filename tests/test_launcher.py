@@ -16,6 +16,7 @@ from urllib.request import urlopen
 ROOT = Path(__file__).resolve().parent.parent
 
 
+@unittest.skipUnless(sys.platform.startswith('linux'), 'Linux launcher requires Linux')
 class LauncherTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="list launcher ")
