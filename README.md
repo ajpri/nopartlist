@@ -8,6 +8,8 @@ Prefer paper? The original [printable No Part List PDF](NPL%201-3.pdf) is
 included in this repository. Download it and print a copy to use offline.
 The web app also has a **Print** button for printing your current list.
 
+A booklet version, [No Part List 1-3 - Booklet](No%20Part%20List%201-3%20-%20Booklet.pdf), is also included — the same pages imposed two-up on letter sheets for booklet printing.
+
 ## Run
 
 Requires Python 3.10 or newer. No packages to install.
